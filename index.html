@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Glasses Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.8.6/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@3.0.0/dist/posenet.min.js"></script>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.js"></script>
+<script nomodule src="https://unpkg.com/@google/model-viewer/dist/model-viewer-legacy.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@2.3.1/dist/model-viewer.js">  
+    </script>
+  </head>
+  <body>
+    <model-viewer id="glasses" src="glasses_09.glb"></model-viewer>
+    <script>
+      const glasses = document.getElementById('glasses');
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let poseNet;
+      let poses = [];
+      
+      async function setupCamera() {
+        video.width = glasses.width;
+        video.height = glasses.height;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+      }
+      
+      async function estimatePose() {
+        const pose = await poseNet.estimateSinglePose(video, {
+          flipHorizontal: false
+        });
+        poses.unshift(pose);
+        if (poses.length > 30) {
+          poses.pop();
+        }
+        window.requestAnimationFrame(estimatePose);
+      }
+      
+      function updateGlassesPosition() {
+        if (poses.length > 0) {
+          const pose = poses[0].keypoints;
+          const nose = pose.find(point => point.part === 'nose');
+          const leftEye = pose.find(point => point.part === 'leftEye');
+          const rightEye = pose.find(point => point.part === 'rightEye');
+          if (nose && leftEye && rightEye) {
+            const noseX = nose.position.x / video.width;
+            const noseY = nose.position.y / video.height;
+            const leftEyeX = leftEye.position.x / video.width;
+            const leftEyeY = leftEye.position.y / video.height;
+            const rightEyeX = rightEye.position.x / video.width;
+            const rightEyeY = rightEye.position.y / video.height;
+            const avgEyeX = (leftEyeX + rightEyeX) / 2;
+            const avgEyeY = (leftEyeY + rightEyeY) / 2;
+            const deltaX = avgEyeX - noseX;
+            const deltaY = avgEyeY - noseY;
+            glasses.setAttribute('position', `${deltaX * 0.5} 0 ${-deltaY * 0.5}`);
+          }
+        }
+        window.requestAnimationFrame(updateGlassesPosition);
+      }
+      
+      async function main() {
+        poseNet = await posenet.load();
+        await setupCamera();
+        estimatePose();
+        updateGlassesPosition();
+      }
+      
+      main();
+    </script>
+  </body>
+</html>
